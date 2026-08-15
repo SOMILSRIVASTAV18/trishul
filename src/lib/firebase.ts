@@ -18,6 +18,7 @@ import {
   getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  updateProfile,
   signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
@@ -36,6 +37,41 @@ export const db = (firebaseConfig as any).firestoreDatabaseId
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+// Format Firebase Auth error messages into user-friendly instructions
+export function formatFirebaseAuthError(error: any): string {
+  if (!error) return 'An unexpected error occurred during authentication.';
+  const code = error.code || '';
+
+  switch (code) {
+    case 'auth/operation-not-allowed':
+    case 'auth/admin-restricted-operation':
+      return 'Email authentication is disabled in your Firebase console. Please enable Email/Password under Authentication > Sign-in method in Firebase Console, or sign in via Google SSO.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Please log in or use "Forget Password?" to reset your password.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address (e.g. name@company.com).';
+    case 'auth/missing-email':
+      return 'Please provide your registered email address.';
+    case 'auth/weak-password':
+      return 'Password is too weak. Please use at least 6 characters with a combination of letters and numbers.';
+    case 'auth/user-not-found':
+      return 'No registered account found with this email address. Please verify your email or register a new account.';
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Invalid email or password. Please check your credentials or register a new account.';
+    case 'auth/too-many-requests':
+      return 'Access temporarily restricted due to multiple attempts. Please wait 1-2 minutes before retrying.';
+    case 'auth/popup-closed-by-user':
+      return 'Sign-in window was closed before completing authentication.';
+    case 'auth/popup-blocked':
+      return 'Sign-in popup was blocked by browser. Please allow popups for this site.';
+    case 'auth/network-request-failed':
+      return 'Network connection error. Please check your internet connectivity and try again.';
+    default:
+      return error.message || 'Authentication request failed. Please verify your credentials and try again.';
+  }
+}
 
 // Initial Seed Data for TRISHUL CRM
 export const initialCustomers: Omit<Customer, 'id'>[] = [

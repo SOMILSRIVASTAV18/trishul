@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer accounts and contacts stored in the CRM.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 200, "description": "Customer contact person name" },
+        "company": { "type": "string", "maxLength": 200, "description": "Customer company organization" },
+        "phone": { "type": "string", "maxLength": 50, "description": "Customer phone contact" },
+        "email": { "type": "string", "maxLength": 150, "description": "Customer email contact" },
+        "address": { "type": "string", "maxLength": 300, "description": "Physical billing or office address" },
+        "status": { "type": "string", "enum": ["Active", "Pending", "Inactive"], "description": "Customer relationship status" },
+        "notes": { "type": "string", "maxLength": 2000, "description": "Account notes and interactions" },
+        "value": { "type": "number", "description": "Account total contract value in INR" },
+        "assignedTo": { "type": "string", "maxLength": 100, "description": "Assigned account manager name" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" }
+      },
+      "required": ["name", "company", "email", "status"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "Sales prospects and incoming pipeline leads.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 200, "description": "Lead prospect person name" },
+        "company": { "type": "string", "maxLength": 200, "description": "Prospect company organization" },
+        "phone": { "type": "string", "maxLength": 50, "description": "Prospect phone contact" },
+        "email": { "type": "string", "maxLength": 150, "description": "Prospect email address" },
+        "source": { "type": "string", "enum": ["Website", "Referral", "Cold Call", "Social Media", "Advertisement", "Other"], "description": "Lead acquisition channel" },
+        "assignedUser": { "type": "string", "maxLength": 100, "description": "Sales agent handling the lead" },
+        "status": { "type": "string", "enum": ["New", "Contacted", "Interested", "Proposal", "Negotiation", "Won", "Lost"], "description": "Sales pipeline milestone" },
+        "estimatedValue": { "type": "number", "description": "Projected deal value in INR" },
+        "notes": { "type": "string", "maxLength": 2000, "description": "Notes and meeting summaries" },
+        "nextFollowUp": { "type": "string", "description": "Scheduled next contact date" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of lead creation" }
+      },
+      "required": ["name", "email", "status", "source"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Work items, follow-ups and assignment tasks.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 300, "description": "Task summary title" },
+        "description": { "type": "string", "maxLength": 2000, "description": "Task details and instructions" },
+        "assignedUserId": { "type": "string", "maxLength": 100, "description": "Employee ID assigned to task" },
+        "assignedUserName": { "type": "string", "maxLength": 100, "description": "Employee name assigned" },
+        "dueDate": { "type": "string", "description": "Due date" },
+        "priority": { "type": "string", "enum": ["High", "Medium", "Low"], "description": "Task urgency priority" },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Completed"], "description": "Completion state" },
+        "category": { "type": "string", "maxLength": 100, "description": "Task department classification" },
+        "completedAt": { "type": "string", "description": "ISO timestamp when completed" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" }
+      },
+      "required": ["title", "priority", "status", "assignedUserName"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "Team staff and CRM role profiles.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100, "description": "Unique employee ID" },
+        "name": { "type": "string", "maxLength": 200, "description": "Full staff member name" },
+        "email": { "type": "string", "maxLength": 150, "description": "Staff work email" },
+        "role": { "type": "string", "enum": ["admin", "supervisor", "user"], "description": "Enterprise access level" },
+        "department": { "type": "string", "maxLength": 150, "description": "Department wing" },
+        "phone": { "type": "string", "maxLength": 50, "description": "Contact phone" },
+        "status": { "type": "string", "enum": ["Active", "Inactive", "On Leave"], "description": "Employment status" },
+        "supervisorId": { "type": "string", "maxLength": 100, "description": "Reporting manager ID" },
+        "supervisorName": { "type": "string", "maxLength": 200, "description": "Reporting manager name" },
+        "leadsClosed": { "type": "number", "description": "Closed deals counter" },
+        "revenueGenerated": { "type": "number", "description": "Total booked revenue" },
+        "tasksCompleted": { "type": "number", "description": "Completed work items counter" },
+        "joinedDate": { "type": "string", "description": "Date joined" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "CompanySettings": {
+      "title": "CompanySettings",
+      "description": "Enterprise workspace customization preferences.",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string", "maxLength": 200, "description": "Enterprise title" },
+        "tagline": { "type": "string", "maxLength": 300, "description": "Brand slogan" },
+        "email": { "type": "string", "maxLength": 150, "description": "Corporate support email" },
+        "phone": { "type": "string", "maxLength": 50, "description": "Corporate helpline" },
+        "address": { "type": "string", "maxLength": 300, "description": "Headquarters address" },
+        "currencySymbol": { "type": "string", "maxLength": 10, "description": "Financial denomination symbol" },
+        "taxNumber": { "type": "string", "maxLength": 50, "description": "GSTIN or Tax identification" },
+        "website": { "type": "string", "maxLength": 200, "description": "Company portal URL" },
+        "enableAiAssistant": { "type": "boolean", "description": "Gemini AI toggle flag" },
+        "theme": { "type": "string", "enum": ["dark", "light"], "description": "Default display aesthetic" }
+      }
+    }
+  },
+  "firestore": {
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Collection of business accounts and clients."
+    },
+    "/leads/{leadId}": {
+      "schema": "Lead",
+      "description": "Collection of incoming sales prospects and deal pipeline."
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Collection of team tasks and follow-up activities."
+    },
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Collection of team members and access credentials."
+    },
+    "/settings/{settingsId}": {
+      "schema": "CompanySettings",
+      "description": "Workspace settings and organization details."
+    }
+  }
+}

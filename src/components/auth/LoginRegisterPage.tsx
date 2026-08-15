@@ -12,7 +12,9 @@ import {
   ArrowRight,
   RefreshCw,
   X,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { TrishulLogo } from '../TrishulLogo';
@@ -52,9 +54,10 @@ export const LoginRegisterPage: React.FC<LoginRegisterPageProps> = ({
   const [regPassword, setRegPassword] = useState<string>('');
   const [agreeTerms, setAgreeTerms] = useState<boolean>(true);
 
-  // Forgot password email
+  // Forgot password email & feedback
   const [forgotEmail, setForgotEmail] = useState<string>('');
   const [forgotStatus, setForgotStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle');
+  const [forgotError, setForgotError] = useState<string | null>(null);
 
   // Loading & error feedback
   const [loading, setLoading] = useState<boolean>(false);
@@ -139,15 +142,19 @@ export const LoginRegisterPage: React.FC<LoginRegisterPageProps> = ({
   // Handle Password Reset
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forgotEmail.trim()) return;
+    const targetEmail = (forgotEmail || email).trim();
+    if (!targetEmail) {
+      setForgotError('Please enter your registered work email address.');
+      return;
+    }
     setForgotStatus('loading');
-    setErrorMsg(null);
+    setForgotError(null);
     try {
-      await sendPasswordReset(forgotEmail.trim());
+      await sendPasswordReset(targetEmail);
       setForgotStatus('sent');
     } catch (err: any) {
       setForgotStatus('error');
-      setErrorMsg(err.message || 'Failed to dispatch reset email.');
+      setForgotError(err.message || 'Failed to dispatch reset email. Please try again.');
     }
   };
 
@@ -329,7 +336,12 @@ export const LoginRegisterPage: React.FC<LoginRegisterPageProps> = ({
             <div className="flex items-center justify-between mt-4 text-xs text-slate-400 px-2">
               <button
                 type="button"
-                onClick={() => setShowForgotModal(true)}
+                onClick={() => {
+                  setForgotEmail(email.trim());
+                  setForgotError(null);
+                  setForgotStatus('idle');
+                  setShowForgotModal(true);
+                }}
                 className="hover:text-cyan-400 italic transition-colors font-medium cursor-pointer"
               >
                 Forget Password?
@@ -445,56 +457,102 @@ export const LoginRegisterPage: React.FC<LoginRegisterPageProps> = ({
       {/* ======================================================== */}
       {showForgotModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-[#161d28] border border-slate-700/80 p-6 shadow-2xl relative text-slate-100">
+          <div className="w-full max-w-md rounded-2xl bg-[#161d28] border border-slate-700/80 p-6 sm:p-7 shadow-2xl relative text-slate-100 animate-in fade-in zoom-in-95 duration-200">
             <button
               onClick={() => {
                 setShowForgotModal(false);
                 setForgotStatus('idle');
+                setForgotError(null);
               }}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer"
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 cursor-pointer transition-colors"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-lg font-bold text-[#fb7185]">Reset Password</h3>
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="p-2 rounded-xl bg-[#fb7185]/20 text-[#fb7185]">
+                <Mail className="w-5 h-5" />
+              </div>
+              <h3 className="text-lg font-bold text-white">Reset Password</h3>
+            </div>
             <p className="text-xs text-slate-400 mt-1">
-              Enter your work email address to receive password recovery credentials.
+              Enter your registered work email to receive a secure Firebase Authentication password reset link.
             </p>
 
+            {forgotError && (
+              <div className="mt-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">{forgotError}</div>
+              </div>
+            )}
+
             {forgotStatus === 'sent' ? (
-              <div className="mt-4 p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs text-center space-y-2">
-                <div className="font-bold">✓ Reset Instructions Dispatched!</div>
-                <p className="text-[11px] text-slate-300">
-                  Please check your inbox at <span className="text-white font-mono">{forgotEmail || email}</span>.
+              <div className="mt-4 p-5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-slate-200 text-xs space-y-3">
+                <div className="flex items-center gap-2 text-emerald-400 font-semibold text-sm">
+                  <CheckCircle className="w-5 h-5 shrink-0" />
+                  <span>Reset Link Dispatched</span>
+                </div>
+                <p className="text-xs text-slate-300">
+                  Firebase Authentication has dispatched a password recovery email to <strong className="text-white font-mono">{forgotEmail || email}</strong>.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setShowForgotModal(false)}
-                  className="mt-2 px-4 py-1.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs cursor-pointer"
-                >
-                  Done
-                </button>
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300 space-y-1.5 leading-relaxed">
+                  <div className="font-semibold text-slate-200">Where to check:</div>
+                  <div>• Check both your <strong>Inbox</strong> and <strong>Spam / Junk</strong> folder.</div>
+                  <div>• Sender is Firebase (<code className="text-cyan-300 font-mono text-[10px]">noreply@...firebaseapp.com</code>).</div>
+                  <div>• If you registered via <strong>Google SSO</strong>, you can log in directly without a password.</div>
+                </div>
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotStatus('idle');
+                      setForgotError(null);
+                    }}
+                    className="flex-1 py-2.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+                  >
+                    Resend / Try Another
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotModal(false);
+                      setForgotStatus('idle');
+                      setForgotError(null);
+                    }}
+                    className="flex-1 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs cursor-pointer shadow transition-colors"
+                  >
+                    Back to Login
+                  </button>
+                </div>
               </div>
             ) : (
-              <form onSubmit={handleForgotSubmit} className="mt-4 space-y-3">
-                <input
-                  type="email"
-                  required
-                  placeholder="Enter your registered email"
-                  value={forgotEmail || email}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-full bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-cyan-400"
-                />
+              <form onSubmit={handleForgotSubmit} className="mt-4 space-y-3.5">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                    Registered Work Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. name@company.com"
+                    value={forgotEmail}
+                    onChange={(e) => {
+                      setForgotEmail(e.target.value);
+                      setForgotError(null);
+                    }}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                  />
+                </div>
 
                 <button
                   type="submit"
                   disabled={forgotStatus === 'loading'}
-                  className="w-full py-2.5 rounded-full font-bold text-white text-xs bg-gradient-to-r from-[#fb7185] to-[#22d3ee] hover:opacity-95 cursor-pointer shadow-md flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-full font-bold text-white text-xs bg-gradient-to-r from-[#fb7185] to-[#22d3ee] hover:opacity-95 cursor-pointer shadow-md flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
                 >
                   {forgotStatus === 'loading' ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <span>Send Reset Link</span>
+                    <span>Send Password Reset Link</span>
                   )}
                 </button>
               </form>

@@ -17,6 +17,7 @@ import {
   signOut,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  updateProfile,
   User
 } from 'firebase/auth';
 import {
@@ -28,7 +29,8 @@ import {
   initialTasks,
   initialEmployees,
   initialSettings,
-  seedFirestoreIfEmpty
+  seedFirestoreIfEmpty,
+  formatFirebaseAuthError
 } from '../lib/firebase';
 import type { Customer, Lead, Task, Employee, CompanySettings, ActivityLog, UserRole, UserProfile, CrmNotification } from '../types';
 
@@ -534,29 +536,28 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch (err: any) {
       console.error('Google Sign-In failed:', err);
-      if (err.code === 'auth/popup-closed-by-user') {
-        throw new Error('Sign-in cancelled: Google popup was closed before completing authentication.');
-      } else if (err.code === 'auth/popup-blocked') {
-        throw new Error('Sign-in popup blocked. Please allow popups for this site and retry.');
-      }
-      throw new Error(err.message || 'Google sign-in could not be completed.');
+      throw new Error(formatFirebaseAuthError(err));
     }
   };
 
-  const sendPasswordReset = async (email: string) => {
+  const sendPasswordReset = async (emailToReset: string) => {
+    const cleanEmail = emailToReset ? emailToReset.trim() : '';
+    if (!cleanEmail) {
+      throw new Error('Please provide your registered work email address.');
+    }
     try {
-      await sendPasswordResetEmail(auth, email.trim());
-      logActivity(`Password reset link dispatched to ${email}`, 'ai', email);
+      await sendPasswordResetEmail(auth, cleanEmail);
+      logActivity(`Password reset requested for ${cleanEmail}`, 'employee', cleanEmail);
       addNotification({
-        title: 'Password Reset Link Dispatched',
-        message: `Recovery email sent to ${email}.`,
+        title: 'Password Reset Dispatched',
+        message: `Recovery email sent to ${cleanEmail}. Please check your inbox and spam folder.`,
         type: 'system',
         priority: 'low',
         targetPage: 'dashboard'
       });
     } catch (err: any) {
       console.warn('Password reset failed:', err);
-      throw new Error(err.message || 'Unable to dispatch reset email.');
+      throw new Error(formatFirebaseAuthError(err));
     }
   };
 
@@ -568,6 +569,25 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         email.trim(),
         user.displayName
       );
+
+      // Check if user is in employees list; if not add them
+      const matched = employees.find(e => e.email.toLowerCase() === email.trim().toLowerCase());
+      if (!matched) {
+        const newEmp: Employee = {
+          id: profile.id,
+          name: profile.displayName,
+          email: profile.email,
+          role: profile.role,
+          department: profile.department,
+          phone: profile.phone || '+91 98765 43210',
+          status: 'Active',
+          leadsClosed: profile.role === 'admin' ? 28 : profile.role === 'supervisor' ? 22 : 0,
+          revenueGenerated: profile.role === 'admin' ? 1250000 : profile.role === 'supervisor' ? 850000 : 0,
+          tasksCompleted: profile.role === 'admin' ? 45 : profile.role === 'supervisor' ? 38 : 0,
+          joinedDate: profile.createdAt
+        };
+        await addEmployee(newEmp);
+      }
 
       setCurrentUser(profile);
       localStorage.setItem('trishul_user_profile', JSON.stringify(profile));
@@ -581,21 +601,25 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     } catch (err: any) {
       console.error('Email login failed:', err);
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        throw new Error('Invalid email or password. If you do not have an account yet, please sign up or use Google SSO.');
-      } else if (err.code === 'auth/wrong-password') {
-        throw new Error('Incorrect password. Please verify your credentials or click "Forget Password?".');
-      } else if (err.code === 'auth/too-many-requests') {
-        throw new Error('Access temporarily disabled due to many failed login attempts. Please reset your password or retry later.');
-      }
-      throw new Error(err.message || 'Authentication failed. Please check your credentials.');
+      throw new Error(formatFirebaseAuthError(err));
     }
   };
 
   const signupWithEmail = async (email: string, pass: string, name: string) => {
     try {
-      await createUserWithEmailAndPassword(auth, email.trim(), pass);
-      const profile = getRoleAndProfileForEmail(email.trim(), name, null);
+      const userCred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      const firebaseUser = userCred.user;
+
+      // Update display name in Firebase Auth
+      if (firebaseUser && name.trim()) {
+        try {
+          await updateProfile(firebaseUser, { displayName: name.trim() });
+        } catch (updErr) {
+          console.warn('Firebase profile displayName update notice:', updErr);
+        }
+      }
+
+      const profile = getRoleAndProfileForEmail(email.trim(), name.trim(), null);
 
       const newEmp: Employee = {
         id: profile.id,
@@ -612,6 +636,21 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       await addEmployee(newEmp);
 
+      // Also persist to Firestore users collection
+      try {
+        await setDoc(doc(db, 'users', firebaseUser.uid), {
+          uid: firebaseUser.uid,
+          email: profile.email,
+          displayName: profile.displayName,
+          role: profile.role,
+          department: profile.department,
+          phone: profile.phone,
+          createdAt: new Date().toISOString()
+        });
+      } catch (userDocErr) {
+        console.warn('Users collection write notice:', userDocErr);
+      }
+
       setCurrentUser(profile);
       localStorage.setItem('trishul_user_profile', JSON.stringify(profile));
       logActivity(`Registered new employee account ${name} (${profile.role.toUpperCase()})`, 'employee', name);
@@ -624,14 +663,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     } catch (err: any) {
       console.error('Email registration failed:', err);
-      if (err.code === 'auth/email-already-in-use') {
-        throw new Error('This email address is already registered. Please log in instead.');
-      } else if (err.code === 'auth/weak-password') {
-        throw new Error('Password should be at least 6 characters.');
-      } else if (err.code === 'auth/invalid-email') {
-        throw new Error('Please enter a valid email address.');
-      }
-      throw new Error(err.message || 'Unable to register account.');
+      throw new Error(formatFirebaseAuthError(err));
     }
   };
 
