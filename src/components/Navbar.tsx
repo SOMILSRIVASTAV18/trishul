@@ -51,7 +51,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const navigate = onNavigate || onSelectNav || (() => {});
   const {
     currentUser,
-    setCurrentUserRole,
     theme,
     toggleTheme,
     logout,

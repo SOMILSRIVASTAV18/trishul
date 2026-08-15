@@ -17,7 +17,6 @@ import {
   Lock,
   Zap,
   LogOut,
-  SlidersHorizontal,
   Mail,
   Sun,
   Moon,
@@ -40,7 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onToggle
 }) => {
-  const { currentUser, tasks, leads, logout, setCurrentUserRole } = useCrm();
+  const { currentUser, tasks, leads, logout } = useCrm();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -318,34 +317,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               </div>
 
-              {/* Role Switcher */}
-              <div className="py-2 border-t border-slate-100 dark:border-slate-800/80">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-1.5 flex items-center gap-1">
-                  <SlidersHorizontal className="w-3 h-3 text-cyan-400" />
-                  <span>Switch Role</span>
-                </p>
-                <div className="grid grid-cols-3 gap-1">
-                  {(['admin', 'supervisor', 'user'] as UserRole[]).map(r => (
-                    <button
-                      key={r}
-                      onClick={() => {
-                        setCurrentUserRole(r);
-                        setShowProfileMenu(false);
-                      }}
-                      className={`py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider border transition-all cursor-pointer ${
-                        currentUser.role === r
-                          ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40 font-black'
-                          : 'bg-slate-50 dark:bg-slate-900 text-slate-500 border-transparent hover:border-slate-700'
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Menu Actions */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
+              <div className="pt-1 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
                 <button
                   onClick={() => {
                     onSelectPage('settings');
