@@ -18,7 +18,10 @@ import {
   Building,
   Calendar,
   CheckCircle2,
-  DollarSign
+  DollarSign,
+  Camera,
+  Upload,
+  Database
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
 import type { Employee, UserRole, EmployeeStatus } from '../types';
@@ -30,7 +33,7 @@ interface EmployeesViewProps {
 }
 
 export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) => {
-  const { employees, updateEmployee, deleteEmployee, currentUser, settings } = useCrm();
+  const { employees, updateEmployee, deleteEmployee, currentUser, settings, customers, leads, tasks } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -42,21 +45,57 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
 
   const isAdmin = currentUser.role === 'admin';
 
-  const filteredEmployees = employees.filter(emp => {
+  // Extra frontend deduplication defense to ensure unique staff members
+  const uniqueEmployees = React.useMemo(() => {
+    const map = new Map<string, Employee>();
+    for (const emp of employees) {
+      if (!emp.name) continue;
+      const key = emp.email ? emp.email.trim().toLowerCase() : `name:${emp.name.trim().toLowerCase()}`;
+      if (!map.has(key)) {
+        map.set(key, emp);
+      }
+    }
+    return Array.from(map.values());
+  }, [employees]);
+
+  const filteredEmployees = uniqueEmployees.filter(emp => {
     const matchesSearch =
       emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.phone.includes(searchTerm);
+      (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (emp.phone && emp.phone.includes(searchTerm));
 
     const matchesRole = roleFilter === 'all' || emp.role === roleFilter;
     return matchesSearch && matchesRole;
   });
 
+  const formatRevenue = (val: number) => {
+    if (!val || val <= 0) return '₹0';
+    if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)}Cr`;
+    if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`;
+    if (val >= 1000) return `₹${(val / 1000).toFixed(0)}k`;
+    return `₹${val.toLocaleString('en-IN')}`;
+  };
+
   const handleEditClick = (emp: Employee) => {
     setSelectedEmployee(emp);
     setEditFormData(emp);
     setIsEditing(true);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Image size exceeds 2MB limit. Please upload a smaller image.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditFormData(prev => ({ ...prev, avatar: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -90,7 +129,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
         'Phone': e.phone,
         'Status': e.status,
         'Monthly Sales Target (INR)': e.salesTarget || 0,
-        'Supervisor / Manager': e.supervisor || 'None'
+        'Supervisor / Manager': e.supervisorName || 'None'
       }))
     }]);
   };
@@ -115,7 +154,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
           e.email,
           e.phone,
           e.status,
-          e.supervisor || 'None'
+          e.supervisorName || 'None'
         ])
       }]
     });
@@ -203,6 +242,29 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
           const rTag = roleTags[emp.role] || roleTags.user;
           const RoleIcon = rTag.icon;
 
+          // Real metric calculation for this team member
+          const empWonLeads = leads.filter(l =>
+            (l.assignedUser === emp.name ||
+             l.assignedUser === emp.email ||
+             l.assignedUserId === emp.id ||
+             (emp.email && l.email && l.email.toLowerCase() === emp.email.toLowerCase())) &&
+            l.status === 'Won'
+          );
+          const realWonDeals = empWonLeads.length;
+
+          const wonLeadsRev = empWonLeads.reduce((acc, l) => acc + (Number(l.estimatedValue) || 0), 0);
+          const customersRev = customers
+            .filter(c => c.assignedTo === emp.name || c.assignedTo === emp.email || c.assignedUserId === emp.id)
+            .reduce((acc, c) => acc + (Number(c.value) || 0), 0);
+          const realRevenue = wonLeadsRev + customersRev;
+
+          const realTasks = tasks.filter(t =>
+            (t.assignedUserId === emp.id ||
+             t.assignedUserName === emp.name ||
+             t.assignedUserName === emp.email) &&
+            t.status === 'Completed'
+          ).length;
+
           return (
             <motion.div
               key={emp.id}
@@ -214,8 +276,17 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
                 {/* Header Profile */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-purple-900 to-indigo-900 text-purple-300 font-black text-sm flex items-center justify-center border border-purple-500/30 shadow-inner">
-                      {emp.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-purple-900 to-indigo-900 text-purple-300 font-black text-sm flex items-center justify-center border border-purple-500/30 shadow-inner overflow-hidden shrink-0">
+                      {emp.avatar ? (
+                        <img
+                          src={emp.avatar}
+                          alt={emp.name}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span>{emp.name.split(' ').map(n => n[0]).join('').substring(0, 2)}</span>
+                      )}
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{emp.name}</h3>
@@ -236,7 +307,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
                 <div className="mt-4 space-y-2 text-xs text-slate-600 dark:text-slate-400">
                   <div className="flex items-center gap-2">
                     <Mail className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    <span className="truncate">{emp.email}</span>
+                    <span className="truncate">{emp.email || 'No email provided'}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Phone className="w-3.5 h-3.5 text-purple-400 shrink-0" />
@@ -250,21 +321,21 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
                   )}
                 </div>
 
-                {/* Performance Metrics Box */}
+                {/* Real Live Performance Metrics Box */}
                 <div className="mt-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-100 dark:border-slate-800 grid grid-cols-3 gap-2 text-center">
-                  <div>
+                  <div title={`${realWonDeals} won deals in pipeline`}>
                     <span className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold block uppercase">Won Deals</span>
-                    <span className="text-xs font-bold text-slate-900 dark:text-white mt-0.5 block">{emp.leadsClosed || 0}</span>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white mt-0.5 block">{realWonDeals}</span>
                   </div>
-                  <div>
+                  <div title={`₹${realRevenue.toLocaleString('en-IN')} total closed contract revenue`}>
                     <span className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold block uppercase">Revenue</span>
-                    <span className="text-xs font-bold text-emerald-400 mt-0.5 block">
-                      ₹{((emp.revenueGenerated || 0) / 1000).toFixed(0)}k
+                    <span className="text-xs font-bold text-emerald-500 dark:text-emerald-400 mt-0.5 block">
+                      {formatRevenue(realRevenue)}
                     </span>
                   </div>
-                  <div>
+                  <div title={`${realTasks} completed tasks`}>
                     <span className="text-[10px] text-slate-700 dark:text-slate-300 font-semibold block uppercase">Tasks</span>
-                    <span className="text-xs font-bold text-cyan-400 mt-0.5 block">{emp.tasksCompleted || 0}</span>
+                    <span className="text-xs font-bold text-cyan-500 dark:text-cyan-400 mt-0.5 block">{realTasks}</span>
                   </div>
                 </div>
               </div>
@@ -284,15 +355,13 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
-                    {emp.id !== currentUser.id && (
-                      <button
-                        onClick={() => setDeleteConfirmId(emp.id)}
-                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rose-500/10 text-slate-600 dark:text-slate-300 hover:text-rose-400 transition-colors"
-                        title="Delete Employee"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setDeleteConfirmId(emp.id)}
+                      className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rose-500/10 text-slate-600 dark:text-slate-300 hover:text-rose-400 transition-colors"
+                      title="Delete Employee"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               )}
@@ -313,6 +382,49 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
             </div>
 
             <form onSubmit={handleSaveEdit} className="mt-4 space-y-4">
+              {/* Photo Upload Section */}
+              <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center font-bold text-lg overflow-hidden border-2 border-purple-500/30 shadow-md shrink-0">
+                  {editFormData.avatar ? (
+                    <img
+                      src={editFormData.avatar}
+                      alt="Avatar Preview"
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span>{editFormData.name ? editFormData.name.charAt(0).toUpperCase() : <User className="w-6 h-6" />}</span>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200">Profile Photo</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Upload a clean face photo (JPG, PNG under 2MB)</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors">
+                      <Upload className="w-3 h-3" />
+                      <span>Choose Photo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageChange}
+                        className="hidden"
+                      />
+                    </label>
+                    {editFormData.avatar && (
+                      <button
+                        type="button"
+                        onClick={() => setEditFormData(prev => ({ ...prev, avatar: '' }))}
+                        className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors"
+                        title="Remove Photo"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Full Name</label>
@@ -436,3 +548,4 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
     </div>
   );
 };
+

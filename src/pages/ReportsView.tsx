@@ -146,30 +146,58 @@ export const ReportsView: React.FC = () => {
     { name: 'Low', count: tasks.filter(t => t.priority === 'Low').length, fill: '#10b981' }
   ];
 
-  // Employee Performance breakdown
-  const employeePerformanceData = employees.map(emp => {
-    const assignedCustomers = customers.filter(c => c.assignedTo === emp.name);
-    const assignedLeadsWon = leads.filter(l => l.assignedUser === emp.name && l.status === 'Won');
-    const directRevenue = assignedCustomers.reduce((a, c) => a + (c.value || 0), 0) + assignedLeadsWon.reduce((a, l) => a + (l.estimatedValue || 0), 0);
-    const calculatedRevenue = (emp.revenueGenerated || 0) + directRevenue;
-    const assignedTasksDone = tasks.filter(t => t.assignedUserName === emp.name && t.status === 'Completed').length;
-    const totalDoneTasks = (emp.tasksCompleted || 0) + assignedTasksDone;
-    const leadsClosedCount = (emp.leadsClosed || 0) + assignedLeadsWon.length;
+  // Employee Performance breakdown (Purely calculated from real live data)
+  const employeePerformanceData = React.useMemo(() => {
+    // Frontend deduplication
+    const seen = new Map<string, Employee>();
+    for (const emp of employees) {
+      if (!emp.name) continue;
+      const key = emp.email ? emp.email.trim().toLowerCase() : `name:${emp.name.trim().toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.set(key, emp);
+      }
+    }
+    const uniqueList = Array.from(seen.values());
 
-    return {
-      id: emp.id,
-      name: emp.name,
-      role: emp.role,
-      department: emp.department,
-      status: emp.status,
-      email: emp.email,
-      phone: emp.phone,
-      joinedDate: emp.joinedDate,
-      revenue: calculatedRevenue,
-      leadsClosed: leadsClosedCount,
-      tasksCompleted: totalDoneTasks
-    };
-  }).sort((a, b) => b.revenue - a.revenue);
+    return uniqueList.map(emp => {
+      const assignedCustomers = customers.filter(c => 
+        c.assignedTo === emp.name || 
+        c.assignedTo === emp.email || 
+        c.assignedUserId === emp.id
+      );
+      const assignedLeadsWon = leads.filter(l => 
+        (l.assignedUser === emp.name || 
+         l.assignedUser === emp.email || 
+         l.assignedUserId === emp.id || 
+         (emp.email && l.email && l.email.toLowerCase() === emp.email.toLowerCase())
+        ) && l.status === 'Won'
+      );
+      
+      const directRevenue = assignedCustomers.reduce((a, c) => a + (Number(c.value) || 0), 0) + 
+                            assignedLeadsWon.reduce((a, l) => a + (Number(l.estimatedValue) || 0), 0);
+      
+      const assignedTasksDone = tasks.filter(t => 
+        (t.assignedUserName === emp.name || 
+         t.assignedUserName === emp.email || 
+         t.assignedUserId === emp.id
+        ) && t.status === 'Completed'
+      ).length;
+
+      return {
+        id: emp.id,
+        name: emp.name,
+        role: emp.role,
+        department: emp.department,
+        status: emp.status,
+        email: emp.email,
+        phone: emp.phone,
+        joinedDate: emp.joinedDate,
+        revenue: directRevenue,
+        leadsClosed: assignedLeadsWon.length,
+        tasksCompleted: assignedTasksDone
+      };
+    }).sort((a, b) => b.revenue - a.revenue);
+  }, [employees, customers, leads, tasks]);
 
   const totalTeamRevenue = employeePerformanceData.reduce((acc, e) => acc + e.revenue, 0) || totalRevenue;
   const totalTeamLeadsClosed = employeePerformanceData.reduce((acc, e) => acc + e.leadsClosed, 0) || wonLeadsCount;

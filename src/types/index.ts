@@ -72,6 +72,7 @@ export interface Employee {
   role: UserRole;
   department: string;
   phone: string;
+  avatar?: string;
   status: EmployeeStatus;
   supervisorId?: string;
   supervisorName?: string;
@@ -79,6 +80,7 @@ export interface Employee {
   revenueGenerated: number;
   tasksCompleted: number;
   joinedDate: string;
+  salesTarget?: number;
 }
 
 export interface ActivityLog {

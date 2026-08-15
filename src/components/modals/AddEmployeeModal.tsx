@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Briefcase, Mail, Phone, Building, Shield, UserCheck, User } from 'lucide-react';
+import { X, Briefcase, Mail, Phone, Building, Shield, UserCheck, User, Camera, Upload, Trash2 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import type { UserRole } from '../../types';
 
@@ -17,12 +17,28 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
     phone: '',
     role: 'user' as UserRole,
     department: 'Sales & Growth',
-    supervisorName: 'Amit Saxena',
+    supervisorName: '',
+    avatar: '',
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Image size exceeds 2MB limit. Please upload a smaller image.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, avatar: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,10 +53,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
         phone: formData.phone || '+91 98765 11223',
         role: formData.role,
         department: formData.department,
+        avatar: formData.avatar || '',
         status: 'Active',
         joinedDate: new Date().toISOString().split('T')[0],
         supervisorId: foundSupervisor?.id,
-        supervisorName: formData.supervisorName,
+        supervisorName: formData.supervisorName || undefined,
         leadsClosed: 0,
         revenueGenerated: 0,
         tasksCompleted: 0
@@ -72,6 +89,51 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          {/* Avatar Upload Section */}
+          <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+            <div className="relative group shrink-0">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center font-bold text-lg overflow-hidden border-2 border-purple-500/30 shadow-md">
+                {formData.avatar ? (
+                  <img
+                    src={formData.avatar}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span>{formData.name ? formData.name.charAt(0).toUpperCase() : <User className="w-6 h-6" />}</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">Profile Photo</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Upload a clean face photo (JPG, PNG under 2MB)</p>
+              <div className="flex items-center gap-2 mt-2">
+                <label className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors">
+                  <Upload className="w-3 h-3" />
+                  <span>Choose Photo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                  />
+                </label>
+                {formData.avatar && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, avatar: '' }))}
+                    className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors"
+                    title="Remove Photo"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Full Name *</label>

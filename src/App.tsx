@@ -81,10 +81,14 @@ const MainLayout: React.FC = () => {
         >
           {/* Top Sticky Navbar */}
           <Navbar
+            currentPage={currentPage}
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             onOpenAuthModal={() => setIsAuthModalOpen(true)}
             onNavigate={(page) => setCurrentPage(page)}
             onReplayIntro={() => setShowIntro(true)}
+            onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
+            onOpenAddLead={() => setIsAddLeadOpen(true)}
+            onOpenAddTask={() => setIsAddTaskOpen(true)}
           />
 
           {/* Page Body */}
