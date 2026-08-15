@@ -1,0 +1,6 @@
+{
+  "name": "TRISHUL CRM",
+  "description": "Smart AI-Powered Customer Relationship Management with cinematic animation, role-based access, customer pipeline, tasks, team management, analytics and Gemini AI assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
