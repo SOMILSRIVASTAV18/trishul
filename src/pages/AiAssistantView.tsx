@@ -18,6 +18,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
+import { sendGeminiChatMessage, GeminiChatMessage } from '../services/geminiService';
 
 interface Message {
   id: string;
@@ -102,18 +103,18 @@ export const AiAssistantView: React.FC = () => {
         pendingTasks: tasks.filter(t => t.status !== 'Completed').map(t => ({ title: t.title, assignee: t.assignedUserName, due: t.dueDate })),
       };
 
-      const response = await fetch('/api/gemini/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: messageText,
-          crmContext: crmContextPayload
-        })
-      });
+      const historyPayload: GeminiChatMessage[] = messages.slice(-8).map(m => ({
+        role: m.role,
+        content: m.content
+      }));
 
-      const data = await response.json();
+      const replyContent = await sendGeminiChatMessage(
+        messageText,
+        historyPayload,
+        crmContextPayload
+      );
 
-      let replyContent = data.reply || "I apologize, but I was unable to process the request at this time. Please try again.";
+      let finalReply = replyContent;
 
       // Check if user requested creating a task or lead via natural language
       if (messageText.toLowerCase().includes('create') && messageText.toLowerCase().includes('task')) {
@@ -127,13 +128,13 @@ export const AiAssistantView: React.FC = () => {
           status: 'Pending',
           category: 'AI Auto-Action'
         });
-        replyContent += "\n\n✅ *Action Executed:* I have also automatically created and registered this task in your Tasks dashboard.";
+        finalReply += "\n\n✅ *Action Executed:* I have also automatically created and registered this task in your Tasks dashboard.";
       }
 
       const assistantMessage: Message = {
         id: `ai-${Date.now()}`,
         role: 'assistant',
-        content: replyContent,
+        content: finalReply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
