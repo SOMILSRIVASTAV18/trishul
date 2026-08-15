@@ -189,7 +189,7 @@ export const LoginRegisterPage: React.FC<LoginRegisterPageProps> = ({
           <div>
             {/* Top Trishul CRM Logo */}
             <div className="mb-6">
-              <TrishulLogo size="sm" />
+              <TrishulLogo size="sm" theme="dark" />
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-bold text-[#fb7185] tracking-tight">

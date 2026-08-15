@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight, Volume2, VolumeX } from 'lucide-react';
+import logoPng from '../assets/logo.png';
 
 interface OpeningAnimationProps {
   onComplete: () => void;
@@ -1315,7 +1316,7 @@ const CRMInterface: React.FC<CRMInterfaceProps> = ({ onContinue }) => (
         <aside className="hidden w-44 border-r border-white/10 bg-[#050c15] p-4 sm:block">
           <div className="mb-7 flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center shrink-0">
-              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+              <img src={logoPng} alt="Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
             </div>
             <span className="text-xs font-bold tracking-wider">TRISHUL</span>
           </div>
