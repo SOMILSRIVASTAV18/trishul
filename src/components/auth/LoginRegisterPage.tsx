@@ -93,6 +93,7 @@ export const LoginRegisterPage: React.FC<LoginRegisterPageProps> = ({
 
   // Handle Google Login
   const handleGoogleLogin = async () => {
+    if (googleLoading || loading) return;
     setErrorMsg(null);
     setGoogleLoading(true);
     try {
@@ -103,7 +104,17 @@ export const LoginRegisterPage: React.FC<LoginRegisterPageProps> = ({
         if (onCloseModal) onCloseModal();
       }, 500);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Google sign-in could not be completed.');
+      const msg = err.message || '';
+      if (
+        msg.includes('closed') ||
+        msg.includes('cancelled') ||
+        err.code === 'auth/popup-closed-by-user' ||
+        err.code === 'auth/cancelled-popup-request'
+      ) {
+        setErrorMsg('Google sign-in popup was closed. Please try again when ready.');
+      } else {
+        setErrorMsg(msg || 'Google sign-in could not be completed.');
+      }
     } finally {
       setGoogleLoading(false);
     }

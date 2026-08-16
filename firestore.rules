@@ -1,6 +1,42 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Employees Collection: Team directory and staff profiles
+    match /employees/{employeeId} {
+      allow read, write: if true;
+    }
+
+    // Users Collection: User account credentials and metadata
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Customers Collection: Client accounts and interaction logs
+    match /customers/{customerId} {
+      allow read, write: if true;
+    }
+
+    // Leads Collection: Sales opportunities and deal pipeline
+    match /leads/{leadId} {
+      allow read, write: if true;
+    }
+
+    // Tasks Collection: Work assignments and follow-ups
+    match /tasks/{taskId} {
+      allow read, write: if true;
+    }
+
+    // Company Settings Collection: Enterprise workspace configuration
+    match /settings/{settingsId} {
+      allow read, write: if true;
+    }
+
+    // Default catch-all rule
     match /{document=**} {
       allow read, write: if true;
     }

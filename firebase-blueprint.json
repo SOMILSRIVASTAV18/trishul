@@ -111,6 +111,10 @@
       "schema": "Employee",
       "description": "Collection of team members and access credentials."
     },
+    "/users/{userId}": {
+      "schema": "Employee",
+      "description": "Collection of user profiles and personal account records."
+    },
     "/settings/{settingsId}": {
       "schema": "CompanySettings",
       "description": "Workspace settings and organization details."

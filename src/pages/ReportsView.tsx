@@ -42,6 +42,7 @@ import {
   Legend
 } from 'recharts';
 import { useCrm } from '../context/CrmContext';
+import type { Employee } from '../types';
 import { generatePdfReport, exportToExcel } from '../utils/exportUtils';
 
 type ReportType = 'all' | 'sales' | 'leads' | 'tasks' | 'employees';

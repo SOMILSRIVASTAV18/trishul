@@ -43,6 +43,17 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 export function formatFirebaseAuthError(error: any): string {
   if (!error) return 'An unexpected error occurred during authentication.';
   const code = error.code || '';
+  const msg = error.message || '';
+
+  if (
+    code === 'auth/popup-closed-by-user' ||
+    code === 'auth/cancelled-popup-request' ||
+    msg.includes('popup-closed-by-user') ||
+    msg.includes('cancelled-popup-request') ||
+    msg.includes('Pending promise was never set')
+  ) {
+    return 'Google sign-in popup was closed or cancelled.';
+  }
 
   switch (code) {
     case 'auth/operation-not-allowed':
@@ -64,6 +75,7 @@ export function formatFirebaseAuthError(error: any): string {
     case 'auth/too-many-requests':
       return 'Access temporarily restricted due to multiple attempts. Please wait 1-2 minutes before retrying.';
     case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
       return 'Sign-in window was closed before completing authentication.';
     case 'auth/popup-blocked':
       return 'Sign-in popup was blocked by browser. Please allow popups for this site.';

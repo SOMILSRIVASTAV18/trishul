@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Briefcase, Mail, Phone, Building, Shield, UserCheck, User, Camera, Upload, Trash2 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
-import type { UserRole } from '../../types';
+import type { UserRole, Employee } from '../../types';
 
 interface AddEmployeeModalProps {
   isOpen: boolean;
@@ -206,7 +206,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
                 className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
               >
                 <option value="">None (Executive)</option>
-                {employees.map(e => <option key={e.id} value={e.name}>{e.name} ({e.role})</option>)}
+                {Array.from(new Map<string, Employee>(employees.filter(e => e.role !== 'user' && e.name).map(e => [e.name, e])).values()).map(e => (
+                  <option key={e.id} value={e.name}>{e.name} ({e.role})</option>
+                ))}
               </select>
             </div>
           </div>

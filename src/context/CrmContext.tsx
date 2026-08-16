@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   collection,
   onSnapshot,
   doc,
+  getDoc,
   setDoc,
   deleteDoc,
   getDocs
@@ -238,7 +239,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     providedPhoto?: string | null,
     currentEmployeesList?: Employee[]
   ): UserProfile => {
-    const lower = email.trim().toLowerCase();
+    const cleanEmail = email ? email.trim() : '';
+    const lower = cleanEmail.toLowerCase();
     const listToSearch = currentEmployeesList || employees;
 
     // 1. Check if an updated profile exists in localStorage
@@ -246,14 +248,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (savedStr) {
       try {
         const saved = JSON.parse(savedStr);
-        if (saved && saved.email && saved.email.toLowerCase() === lower) {
+        if (saved && saved.email && saved.email.trim().toLowerCase() === lower) {
           return saved;
         }
       } catch {}
     }
 
     // 2. Match against current team employee records
-    const matched = listToSearch.find(e => e.email.toLowerCase() === lower);
+    const matched = listToSearch.find(e => e.email && e.email.trim().toLowerCase() === lower);
     if (matched) {
       return {
         id: matched.id,
@@ -267,12 +269,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    // 3. Somil Srivastav as Admin
+    // 3. Somil Srivastava as Admin
     if (lower === 'somilsrivastav18@gmail.com') {
       return {
         id: 'emp-admin',
         email: 'somilsrivastav18@gmail.com',
-        displayName: providedName || 'Somil Srivastav (Admin)',
+        displayName: providedName || 'Somil Srivastava',
         role: 'admin',
         department: 'Executive Management',
         phone: '+91 94551 09687',
@@ -286,7 +288,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return {
         id: 'emp-sup',
         email: 'srivastavasidharth180@gmail.com',
-        displayName: providedName || 'Sidharth Srivastava (Supervisor)',
+        displayName: providedName || 'Sidharth Srivastava',
         role: 'supervisor',
         department: 'Sales & Operations',
         phone: '+91 94551 09687',
@@ -296,10 +298,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // 5. Default user profile for all other accounts
-    const defaultName = providedName || email.split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const defaultName = providedName || (cleanEmail ? cleanEmail.split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Staff Member');
     return {
       id: `emp-${Date.now()}`,
-      email,
+      email: cleanEmail,
       displayName: defaultName,
       role: 'user',
       department: 'Sales & Growth',
@@ -309,14 +311,39 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // Track Firebase Auth state
+  // Track Firebase Auth state and load personal information directly from Firestore database
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user && user.email) {
-        // If current user is already set for this email, keep their customized fields
+        const lowerEmail = user.email.toLowerCase().trim();
+        
+        // 1. Try to load user profile directly from Firestore 'users' collection
+        try {
+          const userDocSnap = await getDoc(doc(db, 'users', user.uid));
+          if (userDocSnap.exists()) {
+            const uData = userDocSnap.data();
+            const profile: UserProfile = {
+              id: uData.id || uData.uid || user.uid,
+              email: uData.email || user.email,
+              displayName: uData.displayName || user.displayName || 'Staff Member',
+              role: uData.role || 'user',
+              department: uData.department || 'Executive Management',
+              phone: uData.phone || '+91 94551 09687',
+              avatar: uData.avatar || user.photoURL || undefined,
+              createdAt: uData.createdAt || uData.joinedDate
+            };
+            setCurrentUser(profile);
+            localStorage.setItem('trishul_user_profile', JSON.stringify(profile));
+            return;
+          }
+        } catch (uErr) {
+          console.warn('Could not fetch user profile from Firestore:', uErr);
+        }
+
+        // 2. Fallback to resolution helper if not found in users collection yet
         setCurrentUser(prev => {
-          if (prev && prev.email.toLowerCase() === user.email?.toLowerCase()) {
+          if (prev && prev.email.toLowerCase() === lowerEmail) {
             return prev;
           }
           const profile = getRoleAndProfileForEmail(
@@ -350,8 +377,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
            (snapshot) => {
              if (!snapshot.empty) {
                const list = snapshot.docs.map(d => ({
-                 id: d.id,
-                 ...d.data()
+                 ...d.data(),
+                 id: d.id
                } as Customer));
                setCustomers(list);
              } else {
@@ -371,8 +398,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
            (snapshot) => {
              if (!snapshot.empty) {
                const list = snapshot.docs.map(d => ({
-                 id: d.id,
-                 ...d.data()
+                 ...d.data(),
+                 id: d.id
                } as Lead));
                setLeads(list);
              } else {
@@ -390,8 +417,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
            (snapshot) => {
              if (!snapshot.empty) {
                const list = snapshot.docs.map(d => ({
-                 id: d.id,
-                 ...d.data()
+                 ...d.data(),
+                 id: d.id
                } as Task));
                setTasks(list);
              } else {
@@ -403,57 +430,71 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
            }
          );
 
-        // Employees Real-time Listener (Real database only) with intelligent deduplication & auto-cleanup
+        // Employees Real-time Listener (Real database only) with robust deduplication & auto-cleanup
         unsubEmployees = onSnapshot(
           collection(db, 'employees'),
           async (snapshot) => {
             if (!snapshot.empty) {
               const rawList = snapshot.docs.map(d => ({
-                id: d.id,
-                ...d.data()
+                ...d.data(),
+                id: d.id
               } as Employee));
 
-              // Deduplicate employees by normalized email or unique name
-              const seenMap = new Map<string, Employee>();
-              const duplicatesToDelete: string[] = [];
+              // Map of canonical employee key -> Employee
+              const map = new Map<string, Employee>();
+              const redundantIdsToDelete: string[] = [];
 
               for (const emp of rawList) {
-                // Filter out corrupted/empty dummy items
+                // Filter out corrupted/empty items
                 if (!emp.name || emp.name.trim() === '') {
-                  duplicatesToDelete.push(emp.id);
+                  redundantIdsToDelete.push(emp.id);
                   continue;
                 }
-
-                // If test ghost record with no email and placeholder dummy phone
                 if (!emp.email && emp.phone === '-91 000000000') {
-                  duplicatesToDelete.push(emp.id);
+                  redundantIdsToDelete.push(emp.id);
                   continue;
                 }
 
-                const normEmail = emp.email ? emp.email.trim().toLowerCase() : '';
+                const normEmail = (emp.email || '').trim().toLowerCase();
                 const normName = emp.name.trim().toLowerCase();
-                const key = normEmail || `name:${normName}`;
+                const rootName = normName.replace(/\((admin|supervisor|user|staff)\)/gi, '').trim();
+                const key = normEmail || `name:${rootName}` || emp.id;
 
-                if (!seenMap.has(key)) {
-                  seenMap.set(key, emp);
+                if (!map.has(key)) {
+                  map.set(key, emp);
                 } else {
-                  const existing = seenMap.get(key)!;
-                  // Quality scoring to retain the best enriched profile
-                  const empScore = (emp.avatar ? 10 : 0) + (emp.role === 'admin' ? 5 : emp.role === 'supervisor' ? 3 : 0) + (emp.phone && !emp.phone.includes('00000') ? 2 : 0) + (emp.email ? 4 : 0);
-                  const existingScore = (existing.avatar ? 10 : 0) + (existing.role === 'admin' ? 5 : existing.role === 'supervisor' ? 3 : 0) + (existing.phone && !existing.phone.includes('00000') ? 2 : 0) + (existing.email ? 4 : 0);
+                  const existing = map.get(key)!;
+                  const existingTime = (existing as any).updatedAt || existing.joinedDate || '';
+                  const empTime = (emp as any).updatedAt || emp.joinedDate || '';
+                  
+                  // Pick the most up-to-date document
+                  const isEmpPrimary = empTime >= existingTime;
+                  const primary = isEmpPrimary ? emp : existing;
+                  const secondary = isEmpPrimary ? existing : emp;
 
-                  if (empScore > existingScore) {
-                    duplicatesToDelete.push(existing.id);
-                    seenMap.set(key, { ...existing, ...emp });
-                  } else {
-                    duplicatesToDelete.push(emp.id);
+                  if (secondary.id && secondary.id !== primary.id) {
+                    redundantIdsToDelete.push(secondary.id);
                   }
+
+                  map.set(key, {
+                    ...secondary,
+                    ...primary,
+                    id: primary.id,
+                    name: primary.name || secondary.name,
+                    phone: (primary.phone && !primary.phone.includes('00000')) ? primary.phone : secondary.phone,
+                    department: primary.department || secondary.department,
+                    avatar: primary.avatar !== undefined ? primary.avatar : (secondary.avatar || ''),
+                    role: primary.role || secondary.role,
+                    leadsClosed: Math.max(primary.leadsClosed || 0, secondary.leadsClosed || 0),
+                    revenueGenerated: Math.max(primary.revenueGenerated || 0, secondary.revenueGenerated || 0),
+                    tasksCompleted: Math.max(primary.tasksCompleted || 0, secondary.tasksCompleted || 0)
+                  });
                 }
               }
 
               // Auto-purge redundant duplicate docs from Firestore
-              if (duplicatesToDelete.length > 0) {
-                for (const dupId of duplicatesToDelete) {
+              if (redundantIdsToDelete.length > 0) {
+                for (const dupId of redundantIdsToDelete) {
                   try {
                     await deleteDoc(doc(db, 'employees', dupId));
                   } catch (delErr) {
@@ -462,7 +503,62 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
               }
 
-              setEmployees(Array.from(seenMap.values()));
+              // Guarantee that every employee has a strictly unique id
+              const liveEmpList: Employee[] = [];
+              const seenIds = new Set<string>();
+              let counter = 1;
+              for (const empItem of map.values()) {
+                let uniqueId = empItem.id;
+                if (!uniqueId || seenIds.has(uniqueId)) {
+                  uniqueId = `${uniqueId || 'emp'}-dup-${counter++}`;
+                }
+                seenIds.add(uniqueId);
+                liveEmpList.push({
+                  ...empItem,
+                  id: uniqueId
+                });
+              }
+
+              setEmployees(liveEmpList);
+
+              // Keep currentUser synchronized with the live employee document from Firestore database
+              setCurrentUser(prev => {
+                if (!prev || !prev.email) return prev;
+                const userEmail = prev.email.toLowerCase().trim();
+                const matchedDbEmp = liveEmpList.find(e => 
+                  (e.email && e.email.toLowerCase().trim() === userEmail) ||
+                  (e.id && e.id === prev.id)
+                );
+                if (matchedDbEmp) {
+                  const newName = matchedDbEmp.name || prev.displayName;
+                  const newPhone = (matchedDbEmp.phone && !matchedDbEmp.phone.includes('00000')) ? matchedDbEmp.phone : prev.phone;
+                  const newDept = matchedDbEmp.department || prev.department;
+                  const newAvatar = matchedDbEmp.avatar !== undefined ? matchedDbEmp.avatar : prev.avatar;
+                  const newRole = matchedDbEmp.role || prev.role;
+
+                  if (
+                    prev.displayName === newName &&
+                    prev.phone === newPhone &&
+                    prev.department === newDept &&
+                    prev.avatar === newAvatar &&
+                    prev.role === newRole
+                  ) {
+                    return prev;
+                  }
+
+                  const updatedFromDb: UserProfile = {
+                    ...prev,
+                    displayName: newName,
+                    phone: newPhone,
+                    department: newDept,
+                    avatar: newAvatar,
+                    role: newRole
+                  };
+                  localStorage.setItem('trishul_user_profile', JSON.stringify(updatedFromDb));
+                  return updatedFromDb;
+                }
+                return prev;
+              });
             } else {
               setEmployees([]);
             }
@@ -550,6 +646,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateUserProfile = async (data: Partial<UserProfile>) => {
     if (!currentUser) return;
+    const prevEmail = (currentUser.email || '').trim().toLowerCase();
+    const prevName = (currentUser.displayName || '').trim();
+    const prevRoot = prevName.replace(/\((admin|supervisor|user|staff)\)/gi, '').trim().toLowerCase();
+
     const updated: UserProfile = {
       ...currentUser,
       ...data,
@@ -559,81 +659,162 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(updated);
     localStorage.setItem('trishul_user_profile', JSON.stringify(updated));
 
-    // Find all matching employee records by ID or email
-    const matchingEmps = employees.filter(
-      e => e.id === currentUser.id || (e.email && e.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase())
-    );
-    const targetEmpId = matchingEmps.length > 0 ? matchingEmps[0].id : currentUser.id;
+    const newEmail = (updated.email || '').trim().toLowerCase();
+    const newName = (updated.displayName || '').trim();
+    const newRoot = newName.replace(/\((admin|supervisor|user|staff)\)/gi, '').trim().toLowerCase();
+
+    const isMatch = (e: Employee) => {
+      if (e.id && (e.id === currentUser.id || e.id === updated.id)) return true;
+      const eEmail = (e.email || '').trim().toLowerCase();
+      if (eEmail && (eEmail === prevEmail || eEmail === newEmail)) return true;
+      const eName = (e.name || '').trim();
+      const eNameLower = eName.toLowerCase();
+      if (eNameLower && (eNameLower === prevName.toLowerCase() || eNameLower === newName.toLowerCase())) return true;
+      const eRoot = eName.replace(/\((admin|supervisor|user|staff)\)/gi, '').trim().toLowerCase();
+      if (eRoot && prevRoot && eRoot === prevRoot) return true;
+      if (eRoot && newRoot && eRoot === newRoot) return true;
+      return false;
+    };
+
+    // Find all matching employee records in current state
+    const matchingEmps = employees.filter(isMatch);
+    const targetEmpId = matchingEmps.length > 0
+      ? matchingEmps[0].id
+      : (currentUser.id || (currentUser.role === 'admin' ? 'emp-admin' : currentUser.role === 'supervisor' ? 'emp-sup' : `emp-${Date.now()}`));
 
     const empUpdates: Partial<Employee> = {
-      name: updated.displayName,
+      name: newName,
       phone: updated.phone || '+91 94551 09687',
-      department: updated.department,
-      avatar: updated.avatar || ''
+      department: updated.department || 'Executive Management',
+      avatar: updated.avatar || '',
+      email: updated.email,
+      role: updated.role,
+      updatedAt: new Date().toISOString()
     };
 
     try {
       if (matchingEmps.length > 0) {
-        // Update the primary matching doc
-        await setDoc(doc(db, 'employees', matchingEmps[0].id), { ...empUpdates }, { merge: true });
-        // Clean up any extra duplicates
+        // Update all matching docs in Firestore to ensure full consistency
+        for (const match of matchingEmps) {
+          await setDoc(doc(db, 'employees', match.id), { ...empUpdates }, { merge: true });
+        }
+        // If multiple copies exist, clean up redundant duplicates
         if (matchingEmps.length > 1) {
           for (let i = 1; i < matchingEmps.length; i++) {
             try {
               await deleteDoc(doc(db, 'employees', matchingEmps[i].id));
-            } catch {}
+            } catch (dupDelErr) {
+              console.warn('Duplicate cleanup notice:', dupDelErr);
+            }
           }
         }
       } else {
-        // Create new employee doc for current user if none exists
+        // Create employee document in Firestore for this user
         const newEmpDoc: Employee = {
           id: targetEmpId,
-          name: updated.displayName,
+          name: newName,
           email: updated.email,
           role: updated.role,
-          department: updated.department,
+          department: updated.department || 'Executive Management',
           phone: updated.phone || '+91 94551 09687',
           avatar: updated.avatar || '',
           status: 'Active',
           leadsClosed: 0,
           revenueGenerated: 0,
           tasksCompleted: 0,
-          joinedDate: currentUser.createdAt || new Date().toISOString().split('T')[0]
+          joinedDate: currentUser.createdAt || new Date().toISOString().split('T')[0],
+          updatedAt: new Date().toISOString()
         };
         await setDoc(doc(db, 'employees', targetEmpId), newEmpDoc, { merge: true });
       }
 
+      // Immediately update local employees state so Employee & Team Management reflects changes instantly
       setEmployees(prev => {
-        const normEmail = updated.email.trim().toLowerCase();
-        const filtered = prev.filter(e => e.id !== targetEmpId && e.email.trim().toLowerCase() !== normEmail);
-        const existingPrimary = prev.find(e => e.id === targetEmpId || e.email.trim().toLowerCase() === normEmail);
-        const mergedEmp: Employee = existingPrimary
-          ? { ...existingPrimary, ...empUpdates }
-          : {
-              id: targetEmpId,
-              name: updated.displayName,
-              email: updated.email,
-              role: updated.role,
-              department: updated.department,
-              phone: updated.phone || '+91 94551 09687',
-              avatar: updated.avatar || '',
-              status: 'Active',
-              leadsClosed: 0,
-              revenueGenerated: 0,
-              tasksCompleted: 0,
-              joinedDate: currentUser.createdAt || new Date().toISOString().split('T')[0]
-            };
-        return [...filtered, mergedEmp];
+        const matchIdx = prev.findIndex(isMatch);
+        if (matchIdx !== -1) {
+          const nextList = [...prev];
+          const matched = nextList[matchIdx];
+          nextList[matchIdx] = {
+            ...matched,
+            name: newName,
+            phone: updated.phone || matched.phone || '+91 94551 09687',
+            department: updated.department || matched.department,
+            avatar: updated.avatar || '',
+            email: updated.email,
+            role: updated.role,
+            updatedAt: new Date().toISOString()
+          };
+          return nextList.filter((e, idx) => idx === matchIdx || !isMatch(e));
+        } else {
+          const newEmpEntry: Employee = {
+            id: targetEmpId,
+            name: newName,
+            email: updated.email,
+            role: updated.role,
+            department: updated.department || 'Executive Management',
+            phone: updated.phone || '+91 94551 09687',
+            avatar: updated.avatar || '',
+            status: 'Active',
+            leadsClosed: 0,
+            revenueGenerated: 0,
+            tasksCompleted: 0,
+            joinedDate: currentUser.createdAt || new Date().toISOString().split('T')[0],
+            updatedAt: new Date().toISOString()
+          };
+          return [newEmpEntry, ...prev.filter(e => !isMatch(e))];
+        }
       });
+
+      // Cascade name change to assigned tasks, leads, and customer accounts
+      if (prevName && newName && prevName.toLowerCase() !== newName.toLowerCase()) {
+        setTasks(prevTasks => prevTasks.map(t => {
+          if (t.assignedUserName === prevName || (prevRoot && t.assignedUserName?.toLowerCase().includes(prevRoot))) {
+            setDoc(doc(db, 'tasks', t.id), { assignedUserName: newName }, { merge: true }).catch(() => {});
+            return { ...t, assignedUserName: newName };
+          }
+          return t;
+        }));
+
+        setLeads(prevLeads => prevLeads.map(l => {
+          if (l.assignedUser === prevName || (prevRoot && l.assignedUser?.toLowerCase().includes(prevRoot))) {
+            setDoc(doc(db, 'leads', l.id), { assignedUser: newName }, { merge: true }).catch(() => {});
+            return { ...l, assignedUser: newName };
+          }
+          return l;
+        }));
+
+        setCustomers(prevCusts => prevCusts.map(c => {
+          if (c.assignedTo === prevName || (prevRoot && c.assignedTo?.toLowerCase().includes(prevRoot))) {
+            setDoc(doc(db, 'customers', c.id), { assignedTo: newName }, { merge: true }).catch(() => {});
+            return { ...c, assignedTo: newName };
+          }
+          return c;
+        }));
+      }
     } catch (err) {
       console.warn('Could not sync employee document to Firestore:', err);
     }
 
-    // Persist to users collection
-    if (auth.currentUser) {
-      try {
+    // Persist to users collection in Firestore
+    const userDocId = auth.currentUser?.uid || currentUser.id || (updated.email ? updated.email.replace(/[@.]/g, '_') : 'user-default');
+    try {
+      await setDoc(doc(db, 'users', userDocId), {
+        uid: userDocId,
+        id: currentUser.id,
+        email: updated.email,
+        displayName: updated.displayName,
+        role: updated.role,
+        department: updated.department,
+        phone: updated.phone || '',
+        avatar: updated.avatar || '',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      // If user has a Firebase Auth UID, also mirror to that UID doc
+      if (auth.currentUser && auth.currentUser.uid !== userDocId) {
         await setDoc(doc(db, 'users', auth.currentUser.uid), {
           uid: auth.currentUser.uid,
+          id: currentUser.id,
           email: updated.email,
           displayName: updated.displayName,
           role: updated.role,
@@ -642,9 +823,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           avatar: updated.avatar || '',
           updatedAt: new Date().toISOString()
         }, { merge: true });
-      } catch (userDocErr) {
-        console.warn('Users collection write notice:', userDocErr);
       }
+    } catch (userDocErr) {
+      console.warn('Users collection write notice:', userDocErr);
     }
 
     // Update Firebase Auth profile if signed in
@@ -665,17 +846,23 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     addNotification({
       title: 'Profile Updated',
-      message: 'Your user profile details and avatar have been saved to the database.',
-      type: 'system',
-      category: 'system'
+      message: 'Your profile details and avatar have been saved to the database.',
+      type: 'employee',
+      priority: 'low',
+      targetPage: 'settings'
     });
-    logActivity('Updated user profile settings', 'system', updated.displayName);
+    logActivity('Updated user profile settings', 'employee', updated.displayName);
   };
 
   const [isAuthScreenOpen, setIsAuthScreenOpen] = useState<boolean>(false);
+  const isGoogleAuthInProgress = useRef<boolean>(false);
 
   // Auth Operations
   const loginWithGoogle = async () => {
+    if (isGoogleAuthInProgress.current) {
+      return;
+    }
+    isGoogleAuthInProgress.current = true;
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
@@ -703,7 +890,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             leadsClosed: 0,
             revenueGenerated: 0,
             tasksCompleted: 0,
-            joinedDate: profile.createdAt
+            joinedDate: profile.createdAt,
+            updatedAt: new Date().toISOString()
           };
           await addEmployee(newEmp);
         } else if (profile.avatar && !matched.avatar) {
@@ -722,8 +910,24 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
     } catch (err: any) {
-      console.error('Google Sign-In failed:', err);
+      const code = err?.code || '';
+      const msg = err?.message || '';
+      const isCancellation =
+        code === 'auth/popup-closed-by-user' ||
+        code === 'auth/cancelled-popup-request' ||
+        msg.includes('popup-closed-by-user') ||
+        msg.includes('cancelled-popup-request') ||
+        msg.includes('Pending promise was never set');
+
+      if (isCancellation) {
+        console.warn('Google Sign-In popup closed or cancelled by user.');
+        throw new Error('Google sign-in popup was closed or cancelled.');
+      }
+
+      console.warn('Google Sign-In failed:', err);
       throw new Error(formatFirebaseAuthError(err));
+    } finally {
+      isGoogleAuthInProgress.current = false;
     }
   };
 
@@ -1171,25 +1375,35 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateEmployee = async (id: string, data: Partial<Employee>) => {
+    const target = employees.find(e => e.id === id);
+    const normEmail = (data.email || target?.email || '').trim().toLowerCase();
+    const normName = (data.name || target?.name || '').trim().toLowerCase();
+
     try {
       await setDoc(doc(db, 'employees', id), data, { merge: true });
     } catch (e) {
       console.warn('Firestore updateEmployee error:', e);
     }
-    setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
 
-    // If updating current user's employee record, sync currentUser avatar / name
-    if (currentUser && (currentUser.id === id || currentUser.email.toLowerCase() === data.email?.toLowerCase())) {
+    setEmployees(prev => prev.map(e => {
+      if (e.id === id || (normEmail && e.email && e.email.trim().toLowerCase() === normEmail)) {
+        return { ...e, ...data };
+      }
+      return e;
+    }));
+
+    // If updating current user's employee record, sync currentUser avatar / name / department
+    if (currentUser && (currentUser.id === id || (normEmail && currentUser.email && currentUser.email.toLowerCase() === normEmail))) {
       const userUpdates: Partial<UserProfile> = {};
       if (data.name) userUpdates.displayName = data.name;
-      if (data.avatar) userUpdates.avatar = data.avatar;
+      if (data.avatar !== undefined) userUpdates.avatar = data.avatar;
       if (data.phone) userUpdates.phone = data.phone;
       if (data.department) userUpdates.department = data.department;
       if (data.role) userUpdates.role = data.role;
-      setCurrentUser(prev => prev ? { ...prev, ...userUpdates } : null);
-      if (currentUser) {
-        localStorage.setItem('trishul_user_profile', JSON.stringify({ ...currentUser, ...userUpdates }));
-      }
+      
+      const newProfile = { ...currentUser, ...userUpdates };
+      setCurrentUser(newProfile);
+      localStorage.setItem('trishul_user_profile', JSON.stringify(newProfile));
     }
 
     logActivity(`Updated employee profile`, 'employee', data.name || id);
@@ -1206,12 +1420,30 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteEmployee = async (id: string) => {
     const target = employees.find(e => e.id === id);
-    try {
-      await deleteDoc(doc(db, 'employees', id));
-    } catch (e) {
-      console.warn('Firestore deleteEmployee error:', e);
+    const targetEmail = target?.email ? target.email.trim().toLowerCase() : '';
+    const targetName = target?.name ? target.name.trim().toLowerCase() : '';
+
+    // Collect all duplicate doc IDs that match this employee (by ID, email, or name)
+    const idsToDelete = new Set<string>([id]);
+    employees.forEach(e => {
+      if (targetEmail && e.email && e.email.trim().toLowerCase() === targetEmail) {
+        idsToDelete.add(e.id);
+      } else if (!targetEmail && targetName && e.name && e.name.trim().toLowerCase() === targetName) {
+        idsToDelete.add(e.id);
+      }
+    });
+
+    // Delete all matching copies from Firestore
+    for (const deleteId of idsToDelete) {
+      try {
+        await deleteDoc(doc(db, 'employees', deleteId));
+      } catch (e) {
+        console.warn('Firestore deleteEmployee error for doc:', deleteId, e);
+      }
     }
-    setEmployees(prev => prev.filter(e => e.id !== id));
+
+    // Remove from local state
+    setEmployees(prev => prev.filter(e => !idsToDelete.has(e.id)));
     logActivity(`Removed employee`, 'employee', target?.name || id);
     addNotification({
       title: 'Team Member Removed',

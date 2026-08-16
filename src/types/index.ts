@@ -81,6 +81,7 @@ export interface Employee {
   tasksCompleted: number;
   joinedDate: string;
   salesTarget?: number;
+  updatedAt?: string;
 }
 
 export interface ActivityLog {

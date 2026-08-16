@@ -31,13 +31,14 @@ export const SettingsView: React.FC = () => {
     toggleTheme
   } = useCrm();
 
-  const [displayName, setDisplayName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [department, setDepartment] = useState('');
-  const [avatar, setAvatar] = useState<string | undefined>(undefined);
+  const [displayName, setDisplayName] = useState(currentUser?.displayName || '');
+  const [phone, setPhone] = useState(currentUser?.phone || '');
+  const [department, setDepartment] = useState(currentUser?.department || '');
+  const [avatar, setAvatar] = useState<string | undefined>(currentUser?.avatar);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const lastSyncedUserKeyRef = useRef<string>('');
 
   // Company Profile form state (for Admin)
   const [companyName, setCompanyName] = useState('');
@@ -53,13 +54,17 @@ export const SettingsView: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Synchronize state with current user profile
+  // Synchronize state with current user profile only on account change or initial load
   useEffect(() => {
     if (currentUser) {
-      setDisplayName(currentUser.displayName || '');
-      setPhone(currentUser.phone || '');
-      setDepartment(currentUser.department || '');
-      setAvatar(currentUser.avatar);
+      const userKey = `${currentUser.id || ''}:${currentUser.email || ''}`;
+      if (lastSyncedUserKeyRef.current !== userKey) {
+        lastSyncedUserKeyRef.current = userKey;
+        setDisplayName(currentUser.displayName || '');
+        setPhone(currentUser.phone || '');
+        setDepartment(currentUser.department || '');
+        setAvatar(currentUser.avatar);
+      }
     }
   }, [currentUser]);
 

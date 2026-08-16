@@ -45,17 +45,55 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
 
   const isAdmin = currentUser.role === 'admin';
 
-  // Extra frontend deduplication defense to ensure unique staff members
+  // Clean, robust employee deduplication for display
   const uniqueEmployees = React.useMemo(() => {
     const map = new Map<string, Employee>();
     for (const emp of employees) {
-      if (!emp.name) continue;
-      const key = emp.email ? emp.email.trim().toLowerCase() : `name:${emp.name.trim().toLowerCase()}`;
+      if (!emp || !emp.name || emp.name.trim() === '') continue;
+      const normEmail = emp.email && emp.email.trim() ? emp.email.trim().toLowerCase() : '';
+      const normName = emp.name.trim().toLowerCase();
+      const rootName = normName.replace(/\((admin|supervisor|user|staff)\)/gi, '').trim();
+      const key = normEmail || `name:${rootName}` || emp.id;
+
       if (!map.has(key)) {
         map.set(key, emp);
+      } else {
+        const existing = map.get(key)!;
+        const existingTime = (existing as any).updatedAt || existing.joinedDate || '';
+        const empTime = (emp as any).updatedAt || emp.joinedDate || '';
+        const isEmpPrimary = empTime >= existingTime;
+        const primary = isEmpPrimary ? emp : existing;
+        const secondary = isEmpPrimary ? existing : emp;
+
+        map.set(key, {
+          ...secondary,
+          ...primary,
+          id: primary.id,
+          name: primary.name || secondary.name,
+          phone: primary.phone || secondary.phone || '+91 94551 09687',
+          department: primary.department || secondary.department,
+          avatar: primary.avatar !== undefined ? primary.avatar : (secondary.avatar || ''),
+          role: primary.role || secondary.role
+        });
       }
     }
-    return Array.from(map.values());
+
+    const result: Employee[] = [];
+    const seenIds = new Set<string>();
+    let counter = 1;
+    for (const item of map.values()) {
+      let safeId = item.id;
+      if (!safeId || seenIds.has(safeId)) {
+        safeId = `${safeId || 'emp'}-item-${counter++}`;
+      }
+      seenIds.add(safeId);
+      result.push({
+        ...item,
+        id: safeId
+      });
+    }
+
+    return result;
   }, [employees]);
 
   const filteredEmployees = uniqueEmployees.filter(emp => {
@@ -165,13 +203,19 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">Employee & Team Management</h2>
             <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-semibold">
               {filteredEmployees.length} Members
             </span>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+              <Database className="w-3 h-3 text-emerald-500" />
+              <span>Live Database</span>
+            </div>
           </div>
-          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">Assign supervisors, monitor performance quotas, and manage staff access tiers.</p>
+          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium mt-1">
+            Real-time workforce records retrieved directly from Firestore database.
+          </p>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
@@ -492,8 +536,8 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ onOpenAddModal }) 
                     className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-purple-500"
                   >
                     <option value="">None (Executive)</option>
-                    {employees.filter(e => e.role !== 'user').map(sup => (
-                      <option key={sup.id} value={sup.name}>{sup.name}</option>
+                    {uniqueEmployees.filter(e => e.role !== 'user' && e.id !== selectedEmployee?.id).map(sup => (
+                      <option key={sup.id} value={sup.name}>{sup.name} ({sup.role})</option>
                     ))}
                   </select>
                 </div>
